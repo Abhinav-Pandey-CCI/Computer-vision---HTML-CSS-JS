@@ -1,0 +1,424 @@
+#Mario Run through CV
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mario Game - Sound-Free</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: sans-serif;
+      background: skyblue;
+      transition: background 1s ease;
+      overflow: hidden;
+    }
+    body.night { background: #1e1e2f; }
+    .ground {
+      position: absolute;
+      bottom: 0;
+      height: 100px;
+      width: 100%;
+      background: green;
+    }
+    body.night .ground { background: #555; }
+    .cloud {
+      position: absolute;
+      width: 120px;
+      height: 60px;
+      background: white;
+      border-radius: 50%;
+      opacity: 0.8;
+      animation: moveClouds 60s linear infinite;
+    }
+    .cloud::before, .cloud::after {
+      content: '';
+      position: absolute;
+      background: white;
+      border-radius: 50%;
+    }
+    .cloud::before { width: 80px; height: 80px; left: -30px; top: -20px; }
+    .cloud::after { width: 60px; height: 60px; right: -30px; top: -10px; }
+    @keyframes moveClouds {
+      0% { left: 100vw; }
+      100% { left: -200px; }
+    }
+    .mario {
+      position: absolute;
+      bottom: 100px;
+      left: 100px;
+      width: 70px;
+      height: 100px;
+    }
+    .head {
+      width: 40px;
+      height: 40px;
+      background: #ffcc99;
+      border-radius: 50%;
+      margin: 0 auto;
+      position: relative;
+      border: 2px solid black;
+      z-index: 2;
+    }
+    .hat {
+      position: absolute;
+      top: -18px;
+      left: -5px;
+      width: 50px;
+      height: 25px;
+      background: red;
+      border-radius: 50% 50% 0 0;
+      border: 2px solid black;
+    }
+    .visor {
+      position: absolute;
+      bottom: -5px;
+      left: 10px;
+      width: 30px;
+      height: 8px;
+      background: red;
+      border-radius: 0 0 5px 5px;
+      border: 2px solid black;
+    }
+    .mustache {
+      position: absolute;
+      bottom: 5px;
+      left: 8px;
+      width: 24px;
+      height: 5px;
+      background: black;
+      border-radius: 2px;
+    }
+    .body {
+      width: 50px;
+      height: 60px;
+      background: red;
+      margin: 0 auto;
+      border: 2px solid black;
+      border-radius: 5px;
+    }
+    .left-arm, .right-arm {
+      position: absolute;
+      width: 12px;
+      height: 30px;
+      background: #ffcc99;
+      border: 2px solid black;
+      border-radius: 6px;
+      top: 5px;
+      transform-origin: top center;
+      animation: idleArm 1s infinite alternate;
+    }
+    .left-arm { left: -14px; }
+    .right-arm { right: -14px; }
+    @keyframes idleArm {
+      0% { transform: rotate(0); }
+      100% { transform: rotate(5deg); }
+    }
+    .left-leg, .right-leg {
+      position: absolute;
+      bottom: -20px;
+      width: 20px;
+      height: 30px;
+      background: blue;
+      border: 2px solid black;
+      border-radius: 4px;
+    }
+    .left-leg { left: 2px; }
+    .right-leg { right: 2px; }
+    .jumping { animation: jump 1.2s ease-out; }
+    @keyframes jump {
+      0% { bottom: 100px; }
+      50% { bottom: 250px; }
+      100% { bottom: 100px; }
+    }
+    .jumping .left-arm { transform: rotate(-50deg); }
+    .jumping .right-arm { transform: rotate(50deg); }
+
+    .obstacle, .coin {
+      position: absolute;
+      bottom: 100px;
+      width: 30px;
+      height: 50px;
+    }
+    .obstacle {
+      background: brown;
+      border-radius: 5px;
+      border: 2px solid black;
+    }
+    .coin {
+      background: gold;
+      border-radius: 50%;
+      border: 3px solid orange;
+    }
+
+    .score-box {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      background: white;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      z-index: 10;
+    }
+    #coinBox {
+      top: 60px;
+      position: fixed;
+      left: 10px;
+      font-size: 20px;
+      background: white;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      z-index: 10;
+    }
+
+    .game-over {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 40px;
+      background: rgba(255, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 20px;
+      text-align: center;
+      display: none;
+    }
+
+    #restartBtn {
+      position: absolute;
+      top: 60%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 20px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      z-index: 11;
+      display: none;
+    }
+
+    #videoInput, #outputCanvas {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      height: 220px;
+      border: 2px solid black;
+      transform: scaleX(-1);
+      z-index: 20;
+    }
+
+    #moon {
+      position: fixed;
+      top: 50px;
+      right: 80px;
+      width: 60px;
+      height: 60px;
+      background: radial-gradient(white, #ccc);
+      border-radius: 50%;
+      box-shadow: 0 0 15px white;
+      display: none;
+    }
+
+    .star {
+      position: fixed;
+      width: 6px;
+      height: 6px;
+      background: white;
+      border-radius: 50%;
+      box-shadow: 0 0 6px white;
+      display: none;
+      animation: twinkle 1.5s infinite alternate ease-in-out;
+    }
+    @keyframes twinkle {
+      from { opacity: 0.3; transform: scale(1); }
+      to { opacity: 1; transform: scale(1.5); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="cloud" style="top:40px; animation-delay:0s;"></div>
+<div class="cloud" style="top:100px; animation-delay:10s;"></div>
+<div class="cloud" style="top:60px; animation-delay:20s;"></div>
+
+<div class="mario" id="mario">
+  <div class="head">
+    <div class="hat"><div class="visor"></div></div>
+    <div class="mustache"></div>
+  </div>
+  <div class="body">
+    <div class="left-arm"></div>
+    <div class="right-arm"></div>
+    <div class="left-leg"></div>
+    <div class="right-leg"></div>
+  </div>
+</div>
+
+<div class="ground"></div>
+<div class="score-box" id="scoreBox">Score: 0</div>
+<div class="score-box" id="coinBox">Coins: 🪙 0</div>
+<div class="game-over" id="gameOver"></div>
+<button id="restartBtn">Restart</button>
+
+<div id="moon"></div>
+<div class="star" style="top: 40px; left: 80%;"></div>
+<div class="star" style="top: 100px; left: 70%;"></div>
+<div class="star" style="top: 60px; left: 90%;"></div>
+<div class="star" style="top: 120px; left: 60%;"></div>
+<div class="star" style="top: 30px; left: 50%;"></div>
+
+<video id="videoInput" autoplay muted></video>
+<canvas id="outputCanvas"></canvas>
+
+<script>
+  const mario = document.getElementById('mario');
+  const scoreBox = document.getElementById('scoreBox');
+  const coinBox = document.getElementById('coinBox');
+  const gameOverText = document.getElementById('gameOver');
+  const restartBtn = document.getElementById('restartBtn');
+
+  let score = 0;
+  let coins = 0;
+  let gameActive = false;
+  let spawnInterval;
+
+  function updateScore() {
+    scoreBox.innerText = "Score: " + score;
+  }
+
+  function updateCoins() {
+    coinBox.innerText = "Coins: 🪙 " + coins;
+  }
+
+  function jump() {
+    if (mario.classList.contains('jumping')) return;
+    mario.classList.add('jumping');
+    setTimeout(() => mario.classList.remove('jumping'), 1200);
+  }
+
+  function gameOver() {
+    gameActive = false;
+    gameOverText.innerText = `GAME OVER\nYour Score: ${score}`;
+    gameOverText.style.display = 'block';
+    restartBtn.style.display = 'block';
+    clearInterval(spawnInterval);
+  }
+
+  function applyNightMode() {
+    const night = Math.floor(score / 5) % 2 === 1;
+    document.body.classList.toggle('night', night);
+    document.getElementById('moon').style.display = night ? 'block' : 'none';
+    document.querySelectorAll('.star').forEach(star => {
+      star.style.display = night ? 'block' : 'none';
+    });
+  }
+
+  function spawnObjects() {
+    if (!gameActive) return;
+    const isCoin = Math.random() < 0.4;
+    const obj = document.createElement('div');
+    obj.className = isCoin ? 'coin' : 'obstacle';
+    obj.style.right = '-60px';
+    document.body.appendChild(obj);
+    let objLeft = window.innerWidth;
+    const speed = 10 + score * 0.5;
+
+    const move = setInterval(() => {
+      objLeft -= speed;
+      obj.style.left = objLeft + 'px';
+
+      const marioRect = mario.getBoundingClientRect();
+      const objRect = obj.getBoundingClientRect();
+
+      if (
+        objRect.left < marioRect.right &&
+        objRect.right > marioRect.left &&
+        objRect.bottom > marioRect.top &&
+        objRect.top < marioRect.bottom
+      ) {
+        clearInterval(move);
+        if (obj.classList.contains('coin')) {
+          score += 2;
+          coins++;
+          obj.remove();
+          updateScore();
+          updateCoins();
+          applyNightMode();
+        } else {
+          gameOver();
+        }
+      }
+
+      if (objLeft < -60) {
+        clearInterval(move);
+        obj.remove();
+        if (!obj.classList.contains('coin') && gameActive) {
+          score++;
+          updateScore();
+          applyNightMode();
+        }
+      }
+    }, 20);
+  }
+
+  function startGame() {
+    score = 0;
+    coins = 0;
+    updateScore();
+    updateCoins();
+    gameOverText.style.display = 'none';
+    restartBtn.style.display = 'none';
+    document.querySelectorAll('.obstacle, .coin').forEach(e => e.remove());
+    gameActive = true;
+    spawnInterval = setInterval(spawnObjects, 1800);
+  }
+
+  restartBtn.onclick = startGame;
+
+  const videoElement = document.getElementById('videoInput');
+  const canvasElement = document.getElementById('outputCanvas');
+  const canvasCtx = canvasElement.getContext('2d');
+
+  const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+  hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+
+  hands.onResults(results => {
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+    if (results.multiHandLandmarks?.length) {
+      const [landmarks] = results.multiHandLandmarks;
+      drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00' });
+      drawLandmarks(canvasCtx, landmarks, { color: '#FF0000' });
+
+      const wrist = landmarks[0];
+      const index = landmarks[8];
+      if (index.y < wrist.y - 0.1 && gameActive) jump();
+    }
+
+    canvasCtx.restore();
+  });
+
+  const camera = new Camera(videoElement, {
+    onFrame: async () => await hands.send({ image: videoElement }),
+    width: 300,
+    height: 220
+  });
+  camera.start();
+
+  startGame();
+</script>
+</body>
+</html>
