@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Mario Game - Sound-Free</title>
+  <title>Mario Game with Voice</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -293,6 +293,13 @@
   let gameActive = false;
   let spawnInterval;
 
+  function speak(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US';
+    speechSynthesis.cancel(); 
+    speechSynthesis.speak(utter);
+  }
+
   function updateScore() {
     scoreBox.innerText = "Score: " + score;
   }
@@ -305,6 +312,7 @@
     if (mario.classList.contains('jumping')) return;
     mario.classList.add('jumping');
     setTimeout(() => mario.classList.remove('jumping'), 1200);
+    speak("Jump");
   }
 
   function gameOver() {
@@ -313,6 +321,7 @@
     gameOverText.style.display = 'block';
     restartBtn.style.display = 'block';
     clearInterval(spawnInterval);
+    speak("Game over");
   }
 
   function applyNightMode() {
@@ -382,6 +391,7 @@
     document.querySelectorAll('.obstacle, .coin').forEach(e => e.remove());
     gameActive = true;
     spawnInterval = setInterval(spawnObjects, 1800);
+    speak("Game started");
   }
 
   restartBtn.onclick = startGame;
@@ -407,7 +417,7 @@
       const index = landmarks[8];
       if (index.y < wrist.y - 0.1 && gameActive) jump();
     }
-
+ 
     canvasCtx.restore();
   });
 
