@@ -1,0 +1,112 @@
+#No. of persons counter
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Person Counter (Back Cam + Voice)</title>
+  <style>
+    body {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+    }
+    video, canvas {
+      border: 2px solid #4caf50;
+      border-radius: 10px;
+      margin-top: 20px;
+      max-width: 100%;
+      height: auto;
+    }
+    #counter {
+      font-size: 24px;
+      margin-top: 15px;
+      color: #4caf50;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📱 Back Cam Person Counter with Voice</h1>
+  <video id="video" width="640" height="480" autoplay muted playsinline></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="counter">Detecting...</div>
+
+  <!-- TensorFlow and COCO-SSD model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const counter = document.getElementById('counter');
+
+    let lastSpokenCount = -1; // To avoid repeating speech unnecessarily
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { exact: "environment" }
+        },
+        audio: false
+      });
+
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      speechSynthesis.speak(utterance);
+    }
+
+    async function main() {
+      try {
+        await setupCamera();
+        video.play();
+        const model = await cocoSsd.load();
+        detectFrame(model);
+      } catch (err) {
+        console.error("Camera error:", err);
+        counter.innerText = "Failed to access back camera.";
+      }
+    }
+
+    function detectFrame(model) {
+      setInterval(async () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const predictions = await model.detect(video);
+        let personCount = 0;
+
+        predictions.forEach(pred => {
+          if (pred.class === 'person' && pred.score > 0.5) {
+            personCount++;
+            const [x, y, width, height] = pred.bbox;
+            ctx.strokeStyle = "#4caf50";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "#4caf50";
+            ctx.fillText(`👤`, x, y > 10 ? y - 5 : 10);
+          }
+        });
+
+        counter.innerText = `👥 Persons Detected: ${personCount}`;
+
+        // Speak only if count changes
+        if (personCount !== lastSpokenCount) {
+          speak(`Detected ${personCount} person${personCount !== 1 ? 's' : ''}`);
+          lastSpokenCount = personCount;
+        }
+
+      }, 1000); // Update every second
+    }
+
+    main();
+  </script>
+</body>
+</html>
