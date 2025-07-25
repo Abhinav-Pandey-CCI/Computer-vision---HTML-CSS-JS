@@ -84,10 +84,17 @@
     let lastPressedTime = 0;
     const pressCooldown = 1000;
 
+    const speak = (text) => {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1.1;
+      utter.pitch = 1.2;
+      speechSynthesis.speak(utter);
+    };
+
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     characters.push('\n'); // Enter key
 
-    const keys = characters.map((char, index) => {
+    const keys = characters.map((char) => {
       const keyElement = document.createElement('div');
       keyElement.className = 'key';
       keyElement.innerText = (char === '\n') ? 'Enter' : char;
@@ -105,7 +112,7 @@
     });
 
     function updateKeyPositions() {
-      keys.forEach((key, index) => {
+      keys.forEach((key) => {
         const rect = key.element.getBoundingClientRect();
         key.x = rect.left + rect.width / 2;
         key.y = rect.top + rect.height / 2;
@@ -173,6 +180,7 @@
 
             if (char === '\n') {
               if (typedText.trim() !== '') {
+                speak(`Searching Google for ${typedText}`);
                 const query = encodeURIComponent(typedText.trim());
                 window.open(`https://www.google.com/search?q=${query}`, '_blank');
                 typedText = '';
@@ -180,6 +188,7 @@
               }
             } else {
               typedText += char;
+              speak(char);
               displayElement.innerText = `Typed: ${typedText}`;
             }
 
