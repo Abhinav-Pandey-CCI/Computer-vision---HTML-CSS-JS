@@ -1,0 +1,205 @@
+# CV based virtual keyboard - google search
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gesture Keyboard</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    #video, #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #keyboard {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(13, 60px);
+      gap: 14px;
+    }
+
+    .key {
+      width: 60px;
+      height: 60px;
+      background-color: #333;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: 8px;
+      font-size: 24px;
+    }
+
+    .enter-key {
+      grid-column: span 2;
+      width: 120px;
+      background-color: #444;
+      font-weight: bold;
+      font-size: 22px;
+    }
+
+    #display {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #0f0;
+      font-size: 28px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px 20px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" width="1280" height="720" autoplay muted></video>
+  <canvas id="canvas" width="1280" height="720"></canvas>
+  <div id="display">Typed: </div>
+  <div id="keyboard"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const displayElement = document.getElementById('display');
+    const keyboardElement = document.getElementById('keyboard');
+
+    let typedText = '';
+    let lastPressedTime = 0;
+    const pressCooldown = 1000;
+
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    characters.push('\n'); // Enter key
+
+    const keys = characters.map((char, index) => {
+      const keyElement = document.createElement('div');
+      keyElement.className = 'key';
+      keyElement.innerText = (char === '\n') ? 'Enter' : char;
+      if (char === '\n') keyElement.classList.add('enter-key');
+      keyboardElement.appendChild(keyElement);
+
+      return {
+        char: char,
+        element: keyElement,
+        x: 0,
+        y: 0,
+        width: (char === '\n') ? 120 : 60,
+        height: 60
+      };
+    });
+
+    function updateKeyPositions() {
+      keys.forEach((key, index) => {
+        const rect = key.element.getBoundingClientRect();
+        key.x = rect.left + rect.width / 2;
+        key.y = rect.top + rect.height / 2;
+      });
+    }
+
+    updateKeyPositions();
+    window.addEventListener('resize', updateKeyPositions);
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+
+    hands.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1 });
+
+        const indexTip = landmarks[8];
+        const thumbTip = landmarks[4];
+
+        const ix = indexTip.x * canvasElement.width;
+        const iy = indexTip.y * canvasElement.height;
+        const tx = thumbTip.x * canvasElement.width;
+        const ty = thumbTip.y * canvasElement.height;
+
+        canvasCtx.beginPath();
+        canvasCtx.strokeStyle = 'cyan';
+        canvasCtx.lineWidth = 3;
+        canvasCtx.moveTo(ix, iy);
+        canvasCtx.lineTo(tx, ty);
+        canvasCtx.stroke();
+
+        const distance = Math.hypot(ix - tx, iy - ty);
+        if (distance < 50 && Date.now() - lastPressedTime > pressCooldown) {
+          updateKeyPositions();
+
+          let closestKey = -1;
+          let minDist = Infinity;
+          for (let i = 0; i < keys.length; i++) {
+            const dx = keys[i].x - ix;
+            const dy = keys[i].y - iy;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < minDist) {
+              minDist = d;
+              closestKey = i;
+            }
+          }
+
+          if (closestKey !== -1) {
+            const char = keys[closestKey].char;
+
+            if (char === '\n') {
+              if (typedText.trim() !== '') {
+                const query = encodeURIComponent(typedText.trim());
+                window.open(`https://www.google.com/search?q=${query}`, '_blank');
+                typedText = '';
+                displayElement.innerText = 'Typed: ';
+              }
+            } else {
+              typedText += char;
+              displayElement.innerText = `Typed: ${typedText}`;
+            }
+
+            lastPressedTime = Date.now();
+          }
+        }
+      }
+
+      canvasCtx.restore();
+    });
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 1280,
+      height: 720,
+    });
+
+    camera.start();
+  </script>
+</body>
+</html>
