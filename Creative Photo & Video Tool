@@ -1,0 +1,491 @@
+#Creative Photo & Video Tool
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Camera with Stickers — Photo & Video</title>
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#9aa6b2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto; background:linear-gradient(180deg,#071022,#07122b);
+    color:#e6eef6; display:flex; gap:18px; padding:20px; min-height:100vh; align-items:flex-start; justify-content:center;
+  }
+
+  .app{
+    width:1100px; max-width:100%; display:grid; grid-template-columns: 1fr 360px; gap:18px;
+  }
+
+  .panel{
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:12px; padding:14px; box-shadow: 0 6px 30px rgba(2,6,23,.6); border:1px solid rgba(255,255,255,0.02);
+  }
+
+  .camera-area{ position:relative; height:620px; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; }
+  .preview-wrap{ position:relative; width:100%; max-width:760px; background:#000; border-radius:8px; overflow:hidden; aspect-ratio: 4/3; }
+  video#camera { width:100%; height:100%; object-fit:cover; transform: scaleX(-1); } /* mirror preview */
+  canvas#overlay { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:auto; }
+
+  .controls { display:flex; gap:10px; justify-content:center; margin-top:8px; flex-wrap:wrap; }
+  .btn{
+    background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    color:var(--accent); border:1px solid rgba(6,182,212,0.15); padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  .btn.secondary{ color:var(--muted); border:1px solid rgba(255,255,255,0.03); }
+  .btn.danger{ color:#ff7b7b; border-color: rgba(255,123,123,0.08); }
+
+  .side { display:flex; flex-direction:column; gap:12px; }
+  .card-title{ font-size:14px; color:var(--muted); margin-bottom:6px; }
+  .stickers { display:flex; gap:8px; flex-wrap:wrap; }
+  .sticker-btn{
+    width:56px; height:56px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px;
+    cursor:pointer; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.02);
+  }
+
+  .info{ font-size:13px; color:var(--muted); line-height:1.4; }
+  .selected-info{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+
+  label{ font-size:13px; color:var(--muted); display:block; margin-bottom:6px; }
+  input[type=range]{ width:100%; }
+
+  .download-link{ display:inline-block; margin-left:6px; color:var(--accent); text-decoration:none; font-weight:600; }
+
+  footer.small{ font-size:12px; color:var(--muted); margin-top:8px; text-align:center; }
+
+  /* small responsive */
+  @media (max-width:960px){
+    .app{ grid-template-columns: 1fr; }
+    .camera-area{ height:auto }
+    .preview-wrap{ aspect-ratio: 4/3; max-width:100% }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel camera-area">
+    <div class="preview-wrap" id="previewWrap">
+      <video id="camera" autoplay playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div class="controls">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn" id="photoModeBtn">Photo</button>
+        <button class="btn secondary" id="videoModeBtn">Video</button>
+      </div>
+
+      <button class="btn" id="captureBtn">📸 Capture</button>
+
+      <div id="recordControls" style="display:none;">
+        <button class="btn" id="startRecordBtn">● Start Recording</button>
+        <button class="btn secondary" id="stopRecordBtn" disabled>■ Stop</button>
+      </div>
+
+      <button class="btn secondary" id="toggleCameraBtn">🔁 Flip</button>
+      <button class="btn danger" id="clearStickersBtn">🧹 Clear Stickers</button>
+    </div>
+
+    <div style="display:flex; gap:12px; justify-content:center; margin-top:6px; flex-wrap:wrap;">
+      <a id="downloadPhotoA" class="btn secondary" download="photo.png" style="display:none;">⬇️ Download Photo</a>
+      <a id="downloadVideoA" class="btn secondary" download="recording.webm" style="display:none;">⬇️ Download Video</a>
+      <div class="info"></div>
+    </div>
+
+    <footer class="small">Works on HTTPS / localhost. Camera permission required...</footer>
+  </div>
+
+  <div class="panel side">
+    <div>
+      <div class="card-title">Stickers (cartoon-style)</div>
+      <div class="stickers" id="stickersPanel">
+        <!-- emoji stickers -->
+        <div class="sticker-btn" data-sticker="😺">😺</div>
+        <div class="sticker-btn" data-sticker="🤖">🤖</div>
+        <div class="sticker-btn" data-sticker="🦊">🦊</div>
+        <div class="sticker-btn" data-sticker="🐼">🐼</div>
+        <div class="sticker-btn" data-sticker="🦄">🦄</div>
+        <div class="sticker-btn" data-sticker="🌟">🌟</div>
+        <div class="sticker-btn" data-sticker="💥">💥</div>
+        <div class="sticker-btn" data-sticker="🎩">🎩</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card-title">Selected sticker</div>
+      <div id="selectedInfo" class="info">None</div>
+      <div class="selected-info" id="selectedControls" style="display:none;">
+        <div style="flex:1">
+          <label>Size</label>
+          <input type="range" id="sizeRange" min="20" max="300" value="100">
+        </div>
+        <div style="width:44px; display:flex; align-items:flex-end; gap:6px;">
+          <button class="btn secondary" id="deleteStickerBtn">🗑</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card-title">Mode & Recording</div>
+      <div class="info" id="modeInfo">Photo mode</div>
+      <div style="margin-top:8px;">
+        <label>Recording format</label>
+        <select id="videoMime">
+          <option value="video/webm;codecs=vp8">webm (vp8)</option>
+          <option value="video/webm;codecs=vp9">webm (vp9)</option>
+          <option value="video/mp4">mp4 (may not be supported)</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="card-title">Recent captures</div>
+      <div id="recentArea" class="info">None yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- hidden canvas for final photo rendering -->
+<canvas id="photoCanvas" style="display:none;"></canvas>
+
+<script>
+(async function(){
+  const video = document.getElementById('camera');
+  const overlay = document.getElementById('overlay');
+  const previewWrap = document.getElementById('previewWrap');
+  const ctx = overlay.getContext('2d');
+  const photoCanvas = document.getElementById('photoCanvas');
+  const captureBtn = document.getElementById('captureBtn');
+  const photoModeBtn = document.getElementById('photoModeBtn');
+  const videoModeBtn = document.getElementById('videoModeBtn');
+  const modeInfo = document.getElementById('modeInfo');
+  const recordControls = document.getElementById('recordControls');
+  const startRecordBtn = document.getElementById('startRecordBtn');
+  const stopRecordBtn = document.getElementById('stopRecordBtn');
+  const downloadPhotoA = document.getElementById('downloadPhotoA');
+  const downloadVideoA = document.getElementById('downloadVideoA');
+  const videoMime = document.getElementById('videoMime');
+  const stickersPanel = document.getElementById('stickersPanel');
+  const selectedInfo = document.getElementById('selectedInfo');
+  const selectedControls = document.getElementById('selectedControls');
+  const sizeRange = document.getElementById('sizeRange');
+  const deleteStickerBtn = document.getElementById('deleteStickerBtn');
+  const clearStickersBtn = document.getElementById('clearStickersBtn');
+  const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+  const recentArea = document.getElementById('recentArea');
+
+  let stream = null;
+  let facing = 'user'; // 'user' or 'environment'
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let isVideoMode = false;
+
+ 
+  let stickers = [];
+  let stickerIdCounter = 1;
+  let selectedStickerId = null;
+
+  
+  function resizeOverlay(){
+    const rect = previewWrap.getBoundingClientRect();
+    overlay.width = rect.width;
+    overlay.height = rect.height;
+  }
+  window.addEventListener('resize', resizeOverlay);
+
+  async function startCamera(){
+    if (stream) {
+      stream.getTracks().forEach(t=>t.stop());
+      stream = null;
+    }
+    const constraints = {
+      audio: true,
+      video: {
+        facingMode: facing,
+        width: { ideal: 1280 },
+        height: { ideal: 960 }
+      }
+    };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+    
+    setTimeout(resizeOverlay, 120);
+  }
+
+  
+  try { await startCamera(); } catch (e) { alert('Camera access denied or not available: ' + e.message); }
+
+ 
+  function drawOverlay(){
+    resizeOverlay();
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+    
+    ctx.save();
+    ctx.translate(overlay.width, 0);
+    ctx.scale(-1,1);
+
+    
+    for (const s of stickers){
+      ctx.save();
+      
+      const cx = s.x * overlay.width;
+      const cy = s.y * overlay.height;
+      ctx.translate(cx, cy);
+      ctx.rotate(s.rotation || 0);
+      const size = s.size * Math.min(overlay.width, overlay.height);
+      
+      ctx.font = `${size}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+     
+      ctx.lineWidth = Math.max(2, size * 0.06);
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillStyle = 'white';
+      ctx.strokeText(s.char, 0, 0);
+      ctx.fillText(s.char, 0, 0);
+
+     
+      if (s.id === selectedStickerId){
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(6,182,212,0.9)';
+        // bounding rect estimate using measureText (approx)
+        const metrics = ctx.measureText(s.char);
+        const h = size; const w = metrics.width;
+        ctx.strokeRect(-w/2 - 10, -h/2 - 6, w + 20, h + 12);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+
+    requestAnimationFrame(drawOverlay);
+  }
+  requestAnimationFrame(drawOverlay);
+
+  
+  function clientToNorm(x, y){
+    const rect = overlay.getBoundingClientRect();
+    
+    const nx = 1 - ((x - rect.left) / rect.width);
+    const ny = (y - rect.top) / rect.height;
+    return {x: Math.max(0, Math.min(1, nx)), y: Math.max(0, Math.min(1, ny))};
+  }
+
+  
+  let dragging = false;
+  let dragOffset = {x:0,y:0};
+
+  overlay.addEventListener('pointerdown', (ev)=>{
+    overlay.setPointerCapture(ev.pointerId);
+    const p = clientToNorm(ev.clientX, ev.clientY);
+    
+    let found = null;
+    for (let i=stickers.length-1;i>=0;i--){
+      const s = stickers[i];
+      
+      const dx = p.x - s.x;
+      const dy = p.y - s.y;
+      const size = s.size * Math.min(overlay.width, overlay.height);
+      const dist = Math.hypot(dx * overlay.width, dy * overlay.height);
+      if (dist < size * 0.6){ found = s; break; }
+    }
+    if (found){
+      selectedStickerId = found.id;
+      selectedInfo.textContent = `Selected: ${found.char}`;
+      selectedControls.style.display = 'flex';
+      sizeRange.value = Math.round(found.size * Math.min(overlay.width, overlay.height));
+      // prepare dragging offset
+      dragging = true;
+      dragOffset.x = p.x - found.x;
+      dragOffset.y = p.y - found.y;
+    } else {
+      // deselect
+      selectedStickerId = null;
+      selectedControls.style.display = 'none';
+      selectedInfo.textContent = 'None';
+    }
+  });
+
+  overlay.addEventListener('pointermove', (ev)=>{
+    if (!dragging) return;
+    const p = clientToNorm(ev.clientX, ev.clientY);
+    const s = stickers.find(it => it.id === selectedStickerId);
+    if (!s) return;
+    s.x = Math.max(0, Math.min(1, p.x - dragOffset.x));
+    s.y = Math.max(0, Math.min(1, p.y - dragOffset.y));
+  });
+
+  overlay.addEventListener('pointerup', (ev)=>{
+    dragging = false;
+    try { overlay.releasePointerCapture(ev.pointerId); } catch(e){}
+  });
+
+  
+  stickersPanel.querySelectorAll('.sticker-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const char = btn.dataset.sticker;
+      const id = stickerIdCounter++;
+      const s = {
+        id,
+        char,
+        x: 0.5,
+        y: 0.5,
+        size: 0.2, // normalized relative to min(width,height)
+        rotation: 0
+      };
+      stickers.push(s);
+      selectedStickerId = id;
+      selectedInfo.textContent = `Selected: ${char}`;
+      selectedControls.style.display = 'flex';
+      sizeRange.value = Math.round(s.size * Math.min(overlay.width, overlay.height));
+      
+    });
+  });
+
+  
+  sizeRange.addEventListener('input', ()=>{
+    const s = stickers.find(it => it.id === selectedStickerId);
+    if (!s) return;
+    const newPx = Number(sizeRange.value);
+    const norm = newPx / Math.min(overlay.width, overlay.height);
+    s.size = Math.max(0.05, Math.min(0.9, norm));
+  });
+
+  deleteStickerBtn.addEventListener('click', ()=>{
+    if (!selectedStickerId) return;
+    stickers = stickers.filter(it => it.id !== selectedStickerId);
+    selectedStickerId = null;
+    selectedControls.style.display = 'none';
+    selectedInfo.textContent = 'None';
+  });
+
+  clearStickersBtn.addEventListener('click', ()=>{
+    stickers = [];
+    selectedStickerId = null;
+    selectedControls.style.display = 'none';
+    selectedInfo.textContent = 'None';
+  });
+
+  
+  captureBtn.addEventListener('click', async ()=>{
+    if (isVideoMode){
+
+    }
+    
+    const vw = video.videoWidth || overlay.width;
+    const vh = video.videoHeight || overlay.height;
+    photoCanvas.width = vw;
+    photoCanvas.height = vh;
+    const pctx = photoCanvas.getContext('2d');
+
+    
+    pctx.save();
+    pctx.translate(photoCanvas.width, 0);
+    pctx.scale(-1,1); // unmirror
+    // draw video full
+    pctx.drawImage(video, 0, 0, photoCanvas.width, photoCanvas.height);
+    pctx.restore();
+
+    for (const s of stickers){
+      pctx.save();
+      const cx = s.x * photoCanvas.width;
+      const cy = s.y * photoCanvas.height;
+      pctx.translate(cx, cy);
+      pctx.rotate(s.rotation || 0);
+      const size = s.size * Math.min(photoCanvas.width, photoCanvas.height);
+      pctx.font = `${size}px serif`;
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.lineWidth = Math.max(2, size * 0.06);
+      pctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      pctx.fillStyle = 'white';
+      pctx.strokeText(s.char, 0, 0);
+      pctx.fillText(s.char, 0, 0);
+      pctx.restore();
+    }
+
+    
+    const dataUrl = photoCanvas.toDataURL('image/png');
+    downloadPhotoA.href = dataUrl;
+    downloadPhotoA.style.display = 'inline-block';
+    downloadPhotoA.download = `photo-${Date.now()}.png`;
+   
+    recentArea.innerHTML = `<div style="display:flex;gap:8px;align-items:center;"><img src="${dataUrl}" style="width:72px;border-radius:6px;border:1px solid rgba(255,255,255,0.04)"><div>Captured ${new Date().toLocaleString()}</div></div>`;
+  });
+
+  
+  startRecordBtn.addEventListener('click', ()=>{
+    if (!stream) return alert('No camera stream');
+    recordedChunks = [];
+    const mime = videoMime.value;
+    try {
+      mediaRecorder = new MediaRecorder(stream, {mimeType: mime});
+    } catch(e){
+      alert('Recording not supported with selected format: ' + e.message);
+      return;
+    }
+    mediaRecorder.ondataavailable = e => {
+      if (e.data && e.data.size) recordedChunks.push(e.data);
+    };
+    mediaRecorder.onstop = ()=>{
+      const blob = new Blob(recordedChunks, { type: recordedChunks[0]?.type || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      downloadVideoA.href = url;
+      downloadVideoA.style.display = 'inline-block';
+      downloadVideoA.download = `recording-${Date.now()}.webm`;
+      downloadVideoA.textContent = '⬇️ Download Video';
+      recentArea.innerHTML = `<div style="display:flex;gap:8px;align-items:center;"><video src="${url}" style="width:140px;border-radius:6px" controls></video><div>Recorded ${new Date().toLocaleString()}</div></div>`;
+      stopRecordBtn.disabled = true;
+      startRecordBtn.disabled = false;
+    };
+    mediaRecorder.start();
+    startRecordBtn.disabled = true;
+    stopRecordBtn.disabled = false;
+    downloadVideoA.style.display = 'none';
+  });
+
+  stopRecordBtn.addEventListener('click', ()=>{
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  });
+
+  
+  photoModeBtn.addEventListener('click', ()=>{
+    isVideoMode = false;
+    modeInfo.textContent = 'Photo mode';
+    recordControls.style.display = 'none';
+    captureBtn.textContent = '📸 Capture';
+  });
+  videoModeBtn.addEventListener('click', ()=>{
+    isVideoMode = true;
+    modeInfo.textContent = 'Video mode';
+    recordControls.style.display = 'flex';
+    captureBtn.textContent = '📸 Snapshot';
+  });
+
+ 
+  toggleCameraBtn.addEventListener('click', async ()=>{
+    facing = (facing === 'user') ? 'environment' : 'user';
+    await startCamera();
+  });
+
+  
+  downloadPhotoA.addEventListener('click', ()=> setTimeout(()=>downloadPhotoA.style.display='none', 1000));
+
+  
+  modeInfo.textContent = 'Photo mode';
+  recordControls.style.display = 'none';
+  resizeOverlay();
+
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'Delete' || e.key === 'Backspace'){
+      if (selectedStickerId){ stickers = stickers.filter(it=>it.id!==selectedStickerId); selectedStickerId=null; selectedControls.style.display='none'; selectedInfo.textContent='None'; }
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
