@@ -112,19 +112,19 @@
     predictions.forEach(pred => {
       const [x, y, width, height] = pred.bbox;
 
-      // Draw bounding box
+      
       ctx.beginPath();
       ctx.rect(x, y, width, height);
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#00fff7';
       ctx.stroke();
 
-      // Draw label
+      
       ctx.font = 'bold 20px Orbitron, sans-serif';
       ctx.fillStyle = '#00fff7';
       ctx.fillText(`${pred.class} - ${Math.round(pred.score * 100)}%`, x + 5, y - 10);
 
-      // If object is NOT a person, search Google with voice
+      
       if (pred.class.toLowerCase() !== 'person') {
         if (!lastSearched[pred.class] || now - lastSearched[pred.class] > searchCooldown) {
           speak(`Searching Google for ${pred.class}`);
