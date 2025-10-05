@@ -1,0 +1,213 @@
+# AI-Pushups-counter-with-CV
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Push-up Counter with Voice</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      font-family: Arial, sans-serif;
+    }
+
+    #counterBox {
+      position: absolute;
+      top: 40px;
+      left: 40px;
+      font-size: 80px;
+      font-weight: bold;
+      color: limegreen;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 10px 30px;
+      border-radius: 10px;
+      z-index: 10;
+    }
+
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+  </style>
+</head>
+<body>
+  <div id="counterBox">0</div>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const counterBox = document.getElementById("counterBox");
+
+    let detector;
+    let pushupCount = 0;
+    let isDown = false;
+
+    // ✅ Iron Man Style Voice (default system voice)
+    function speak(text) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'en-US';
+      window.speechSynthesis.cancel(); // avoid overlap
+      window.speechSynthesis.speak(utter);
+    }
+
+    function speakCount(count) {
+      speak(`${count}`);
+    }
+
+    function handleVoiceCommand(text) {
+      const msg = text.toLowerCase();
+      if (msg.includes("i can't do more")) {
+        speak("Just try for few more, you can do it!");
+      } else if (msg.includes("not possible")) {
+        speak(`Alright, don't hurt yourself. You've already done ${pushupCount} pushups!`);
+      }
+    }
+
+    function startVoiceRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Speech Recognition not supported.");
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript;
+        handleVoiceCommand(transcript);
+      };
+
+      recognition.onerror = (e) => console.error("Speech error:", e.error);
+      recognition.onend = () => recognition.start();
+      recognition.start();
+    }
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      video.srcObject = stream;
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          video.play();
+          video.width = window.innerWidth;
+          video.height = window.innerHeight;
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          resolve();
+        };
+      });
+    }
+
+    function getAngle(a, b, c) {
+      const ab = { x: b.x - a.x, y: b.y - a.y };
+      const cb = { x: b.x - c.x, y: b.y - c.y };
+      const dot = ab.x * cb.x + ab.y * cb.y;
+      const magAB = Math.sqrt(ab.x ** 2 + ab.y ** 2);
+      const magCB = Math.sqrt(cb.x ** 2 + cb.y ** 2);
+      return Math.acos(dot / (magAB * magCB)) * (180 / Math.PI);
+    }
+
+    function drawLine(p1, p2, color = "lime", width = 4) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+
+    function drawAngleLabel(x, y, angle) {
+      ctx.fillStyle = "#000";
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(x - 30, y - 30, 70, 40);
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = "#ff3333";
+      ctx.strokeRect(x - 30, y - 30, 70, 40);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 18px Arial";
+      ctx.fillText(`${Math.round(angle)}°`, x - 10, y - 5);
+    }
+
+    async function runPoseDetection() {
+      detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet);
+
+      setInterval(async () => {
+        const poses = await detector.estimatePoses(video);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (poses.length > 0) {
+          const keypoints = poses[0].keypoints;
+
+          function getKey(index) {
+            const kp = keypoints[index];
+            return {
+              x: kp.x * canvas.width / video.videoWidth,
+              y: kp.y * canvas.height / video.videoHeight,
+              score: kp.score,
+            };
+          }
+
+          const leftShoulder = getKey(5);
+          const leftElbow = getKey(7);
+          const leftWrist = getKey(9);
+          const rightShoulder = getKey(6);
+          const rightElbow = getKey(8);
+          const rightWrist = getKey(10);
+
+          let angleL = null, angleR = null;
+
+          if (leftShoulder.score > 0.5 && leftElbow.score > 0.5 && leftWrist.score > 0.5) {
+            drawLine(leftShoulder, leftElbow);
+            drawLine(leftElbow, leftWrist);
+            angleL = getAngle(leftShoulder, leftElbow, leftWrist);
+            drawAngleLabel(leftElbow.x, leftElbow.y, angleL);
+          }
+
+          if (rightShoulder.score > 0.5 && rightElbow.score > 0.5 && rightWrist.score > 0.5) {
+            drawLine(rightShoulder, rightElbow);
+            drawLine(rightElbow, rightWrist);
+            angleR = getAngle(rightShoulder, rightElbow, rightWrist);
+            drawAngleLabel(rightElbow.x, rightElbow.y, angleR);
+          }
+
+          if (angleL && angleR) {
+            const avgAngle = (angleL + angleR) / 2;
+
+            if (avgAngle < 90) isDown = true;
+
+            if (avgAngle > 160 && isDown) {
+              pushupCount++;
+              isDown = false;
+              counterBox.innerText = pushupCount;
+              speakCount(pushupCount);
+            }
+          }
+        }
+      }, 100);
+    }
+
+    async function init() {
+      await setupCamera();
+      startVoiceRecognition();
+      runPoseDetection();
+    }
+
+    init();
+  </script>
+</body>
+</html>
