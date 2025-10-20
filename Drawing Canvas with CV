@@ -50,19 +50,16 @@
   </style>
 </head>
 <body>
-  <!-- Left: Drawing Area -->
   <div id="canvas-container">
     <div class="mode-label" id="modeLabel">Mode: Draw</div>
     <canvas id="drawingCanvas"></canvas>
   </div>
 
-  <!-- Right: Camera Area -->
   <div id="video-container">
     <video id="videoElement" autoplay muted playsinline></video>
     <canvas id="handCanvas"></canvas>
   </div>
 
-  <!-- MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
@@ -86,7 +83,6 @@
     let lastY = 0;
     let lastSpokenMode = "";
 
-    // Speak function
     function speak(text) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1;
@@ -94,7 +90,6 @@
       speechSynthesis.speak(utterance);
     }
 
-    // On load speak once
     window.onload = () => {
       speak("Computer vision based canvas started");
     };
@@ -186,7 +181,6 @@
         const landmarks = results.multiHandLandmarks[0];
         const fingerCount = countExtendedFingers(landmarks);
 
-        // Hand fully open = clear
         if (fingerCount === 5) {
           clearCanvas();
           drawBoundingBox(landmarks, "Cleared");
@@ -200,7 +194,6 @@
           return;
         }
 
-        // Detect draw vs erase
         eraseMode = detectEraseMode(landmarks);
         const modeText = eraseMode ? "Eraser" : "Drawing";
 
@@ -234,8 +227,6 @@
       width: 640,
       height: 480,
     });
-
-    camera.start();
   </script>
 </body>
 </html>
