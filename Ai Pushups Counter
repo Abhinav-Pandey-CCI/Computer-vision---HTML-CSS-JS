@@ -55,11 +55,10 @@
     let pushupCount = 0;
     let isDown = false;
 
-    // ✅ Iron Man Style Voice (default system voice)
     function speak(text) {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'en-US';
-      window.speechSynthesis.cancel(); // avoid overlap
+      window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utter);
     }
 
@@ -211,3 +210,4 @@
   </script>
 </body>
 </html>
+
