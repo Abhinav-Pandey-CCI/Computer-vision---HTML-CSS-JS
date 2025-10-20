@@ -50,14 +50,13 @@
       DrawingUtils
     } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-    // HAND_CONNECTIONS manually copied from MediaPipe hands.js
     const HAND_CONNECTIONS = [
-      [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
-      [0, 5], [5, 6], [6, 7], [7, 8],       // Index
-      [5, 9], [9,10], [10,11], [11,12],     // Middle
-      [9,13], [13,14], [14,15], [15,16],    // Ring
-      [13,17], [17,18], [18,19], [19,20],   // Pinky
-      [0,17]                                // Palm base to pinky base
+      [0, 1], [1, 2], [2, 3], [3, 4],
+      [0, 5], [5, 6], [6, 7], [7, 8],
+      [5, 9], [9,10], [10,11], [11,12],
+      [9,13], [13,14], [14,15], [15,16],
+      [13,17], [17,18], [18,19], [19,20],
+      [0,17]
     ];
 
     const video = document.getElementById("video");
@@ -159,7 +158,6 @@
       const scaleX = canvas.width;
       const scaleY = canvas.height;
 
-      // Draw neon box and proper connections on mirrored side
       if (mirrored) {
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         const transformed = landmarks.map(pt => {
@@ -201,7 +199,6 @@
         }
 
       } else {
-        // Default web-style lines on explosion side
         ctx.strokeStyle = "lime";
         ctx.lineWidth = 1.2;
 
