@@ -92,7 +92,7 @@
     };
 
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    characters.push('\n'); // Enter key
+    characters.push('\n');
 
     const keys = characters.map((char) => {
       const keyElement = document.createElement('div');
@@ -207,8 +207,6 @@
       width: 1280,
       height: 720,
     });
-
-    camera.start();
   </script>
 </body>
 </html>
