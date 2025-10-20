@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hand Piano (minimal)</title>
+  <style>
+    html,body{
+      margin:0;
+      height:100%;
+      background:#000;
+      overflow:hidden;
+    }
+    #canvasContainer{
+      position:fixed;
+      inset:0;
+      display:block;
+      background:#000;
+    }
+    canvas{
+      width:100%;
+      height:100%;
+      display:block;
+      background:#000;
+    }
+    .controls{
+      position:fixed;
+      right:12px;
+      top:12px;
+      display:flex;
+      gap:8px;
+      z-index:60;
+    }
+    .btn{
+      width:44px;
+      height:44px;
+      border-radius:50%;
+      border:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(255,255,255,0.06);
+      backdrop-filter: blur(6px);
+      cursor:pointer;
+      color:#eaf6ff;
+      font-size:18px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    }
+    .btn:active{ transform: translateY(1px); }
+    .hint{
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      background:rgba(255,255,255,0.06);
+      z-index:55;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvasContainer">
+    <canvas id="outputCanvas"></canvas>
+  </div>
+
+  <div class="controls" aria-hidden="false">
+    <button id="toggleCamBtn" class="btn" title="toggle camera">⏯️</button>
+    <button id="gainDown" class="btn" title="volume down">➖</button>
+    <button id="gainUp" class="btn" title="volume up">➕</button>
+  </div>
+  <div class="hint" id="hintDot" title=""></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+  <script>
+  const canvas = document.getElementById('outputCanvas');
+  const ctx = canvas.getContext('2d');
+
+  function fitCanvas(){
+    const rect = document.getElementById('canvasContainer').getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+  window.addEventListener('resize', fitCanvas);
+  fitCanvas();
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.22;
+  masterGain.connect(audioCtx.destination);
+
+  function playTone(freq, duration=0.25){
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = 0;
+    o.connect(g);
+    g.connect(masterGain);
+    o.start();
+    const t = audioCtx.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1.0, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    o.stop(t + duration + 0.02);
+  }
+
+  const fingerFreq = {
+    0: 261.63,
+    1: 293.66,
+    2: 329.63,
+    3: 349.23,
+    4: 392.00
+  };
+
+  let prevFolded = [false,false,false,false,false];
+
+  function dist(a,b){
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+  function normalizedHandSize(landmarks){
+    return dist(landmarks[0], landmarks[9]);
+  }
+
+  const fingerIndices = [
+    {tip:4, pip:3},
+    {tip:8, pip:6},
+    {tip:12, pip:10},
+    {tip:16, pip:14},
+    {tip:20, pip:18}
+  ];
+
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17]
+  ];
+
+  const fingerColors = ['#ff8b5b','#ffd86b','#7ce7b7','#7cc7ff','#c58bff'];
+
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.5
+  });
+  hands.onResults(onResults);
+
+  const videoElement = document.createElement('video');
+  videoElement.style.display = 'none';
+  videoElement.playsInline = true;
+  document.body.appendChild(videoElement);
+
+  const camera = new Camera(videoElement, {
+    onFrame: async () => { await hands.send({image: videoElement}); },
+    width: 1280,
+    height: 720
+  });
+
+  let camRunning = false;
+  async function startCamera(){
+    try{
+      await camera.start();
+      camRunning = true;
+    }catch(e){
+      camRunning = false;
+      console.error('camera start failed', e);
+    }
+  }
+  startCamera();
+
+  document.getElementById('toggleCamBtn').addEventListener('click', async ()=>{
+    if(camRunning){ camera.stop(); camRunning = false; }
+    else { await startCamera(); }
+  });
+
+  document.getElementById('gainUp').addEventListener('click', ()=>{
+    masterGain.gain.value = Math.min(0.9, masterGain.gain.value + 0.05);
+  });
+  document.getElementById('gainDown').addEventListener('click', ()=>{
+    masterGain.gain.value = Math.max(0.01, masterGain.gain.value - 0.05);
+  });
+
+  document.getElementById('hintDot').addEventListener('click', ()=> {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    document.getElementById('hintDot').style.opacity = 0.5;
+  }, {once:true});
+
+  function onResults(results){
+    fitCanvas();
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.translate(canvas.width,0);
+    ctx.scale(-1,1);
+
+    if(results.image){
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    }
+
+    if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0){
+      const landmarks = results.multiHandLandmarks[0];
+      const pts = landmarks.map(l => ({ x: l.x * canvas.width, y: l.y * canvas.height, z: l.z }));
+
+      ctx.lineWidth = Math.max(1, Math.round(canvas.width/500));
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      for(const pair of connections){
+        const a = pts[pair[0]];
+        const b = pts[pair[1]];
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+
+      for(let i=0;i<pts.length;i++){
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.arc(pts[i].x, pts[i].y, Math.max(2, canvas.width/420), 0, Math.PI*2);
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.stroke();
+      }
+
+      const fingertipPts = [4,8,12,16,20].map(i=>pts[i]);
+      ctx.beginPath();
+      for(let i=0;i<fingertipPts.length;i++){
+        if(i===0) ctx.moveTo(fingertipPts[i].x, fingertipPts[i].y);
+        else ctx.lineTo(fingertipPts[i].x, fingertipPts[i].y);
+      }
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6,6]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      fingertipPts.forEach((p, idx)=>{
+        ctx.beginPath();
+        ctx.fillStyle = fingerColors[idx];
+        ctx.arc(p.x, p.y, Math.max(6, canvas.width/130), 0, Math.PI*2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.stroke();
+      });
+
+      const handSize = normalizedHandSize(landmarks) || 0.0001;
+      const folded = [false,false,false,false,false];
+      for(let i=0;i<fingerIndices.length;i++){
+        const {tip,pip} = fingerIndices[i];
+        const tipLM = landmarks[tip];
+        const pipLM = landmarks[pip];
+        const d = dist(tipLM,pipLM);
+        const norm = d / handSize;
+        const thresh = (i===0) ? 0.55 : 0.45;
+        folded[i] = (norm < thresh);
+      }
+
+      for(let i=0;i<folded.length;i++){
+        if(folded[i] && !prevFolded[i]){
+          playTone(fingerFreq[i], 0.28);
+        }
+        prevFolded[i] = folded[i];
+      }
+
+    } else {
+      prevFolded = [false,false,false,false,false];
+    }
+
+    ctx.restore();
+  }
+
+  document.body.addEventListener('click', ()=> { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once:true});
+
+  </script>
+</body>
+</html>
