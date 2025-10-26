@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Face Expression Overlay</title>
+  <style>
+    :root{--text:#e6eef8;--box-bg:rgba(0,0,0,0.45);--line:rgba(124,58,237,0.95);--dot:rgba(34,197,94,0.95)}
+    html,body{height:100%;margin:0;background:#000;overflow:hidden;}
+    #wrap{position:fixed;left:0;top:0;width:100vw;height:100vh;overflow:hidden;display:block;}
+    video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+    canvas{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;display:block;}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+</head>
+<body>
+  <div id="wrap">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+<script>
+(async ()=>{
+const video=document.getElementById('webcam');
+const canvas=document.getElementById('overlay');
+const ctx=canvas.getContext('2d');
+let smileBaseline=null;
+let lastNextAt=0;
+let smileCount=0,browCount=0;
+let lastTilt=0;
+const FACE={leftMouth:61,rightMouth:291,upperLip:13,lowerLip:14,leftEyeOuter:33,rightEyeOuter:263,leftBrow:70,rightBrow:300,leftCheek:234,rightCheek:454};
+function dist(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
+function dprScale(){const dpr=window.devicePixelRatio||1;canvas.width=Math.floor(canvas.clientWidth*dpr);canvas.height=Math.floor(canvas.clientHeight*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+window.addEventListener('resize',()=>{dprScale();});
+video.addEventListener('loadeddata',()=>{dprScale();});
+const faceMesh=new FaceMesh({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.5});
+faceMesh.onResults(onResults);
+const camera=new Camera(video,{onFrame:async()=>{await faceMesh.send({image:video});},width:1280,height:720});
+await camera.start();
+const SMILE_THRESHOLD=0.06;
+const BROW_RAISE_THRESHOLD=0.02;
+const NEXT_COOLDOWN_MS=1000;
+function onResults(results){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(!results.multiFaceLandmarks||results.multiFaceLandmarks.length===0){drawTextOverlay();return;}
+  const lm=results.multiFaceLandmarks[0];
+  const leftMouth=lm[FACE.leftMouth],rightMouth=lm[FACE.rightMouth],upperLip=lm[FACE.upperLip],lowerLip=lm[FACE.lowerLip];
+  const leftEye=lm[FACE.leftEyeOuter],rightEye=lm[FACE.rightEyeOuter],leftBrow=lm[FACE.leftBrow],rightBrow=lm[FACE.rightBrow];
+  const leftCheek=lm[FACE.leftCheek],rightCheek=lm[FACE.rightCheek];
+  const faceWidth=dist(leftCheek,rightCheek);
+  const mouthWidth=dist(leftMouth,rightMouth);
+  const mouthOpen=dist(upperLip,lowerLip);
+  const leftBrowDist=(leftEye.y-leftBrow.y);
+  const rightBrowDist=(rightEye.y-rightBrow.y);
+  const browAvg=(leftBrowDist+rightBrowDist)/2;
+  const dx=rightEye.x-leftEye.x;
+  const dy=rightEye.y-leftEye.y;
+  const angleRad=Math.atan2(dy,dx);
+  const angleDeg=angleRad*180/Math.PI;
+  lastTilt=angleDeg;
+  if(smileBaseline===null){smileBaseline={mouthWidth:mouthWidth,mouthOpen:mouthOpen,brow:browAvg,_frames:1};drawMeshAndText(lm);return;}
+  else if(smileBaseline._frames<10){const n=smileBaseline._frames;smileBaseline.mouthWidth=(smileBaseline.mouthWidth*n+mouthWidth)/(n+1);smileBaseline.mouthOpen=(smileBaseline.mouthOpen*n+mouthOpen)/(n+1);smileBaseline.brow=(smileBaseline.brow*n+browAvg)/(n+1);smileBaseline._frames++;drawMeshAndText(lm,'Calibrating...');return;}
+  const smileRatio=(mouthWidth-smileBaseline.mouthWidth)/smileBaseline.mouthWidth;
+  const browRatio=(browAvg-smileBaseline.brow)/Math.abs(smileBaseline.brow||1);
+  if(smileRatio>SMILE_THRESHOLD&&mouthOpen<0.06){if(!window._smileTriggered){window._smileTriggered=true;smileCount++;setTimeout(()=>{window._smileTriggered=false;},700);}}
+  if(browRatio>BROW_RAISE_THRESHOLD){const now=performance.now();if(now-lastNextAt>NEXT_COOLDOWN_MS){lastNextAt=now;browCount++;}}
+  drawMeshAndText(lm);
+}
+function drawMeshAndText(landmarks,note){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  ctx.save();
+  ctx.lineWidth=Math.max(1,Math.floor(h*0.0025));
+  ctx.strokeStyle='rgba(124,58,237,0.95)';
+  ctx.fillStyle='rgba(34,197,94,0.95)';
+  ctx.lineJoin='round';
+  ctx.lineCap='round';
+  const toPx=(pt)=>({x:w-pt.x*w,y:pt.y*h});
+  ctx.beginPath();
+  for(let i=0;i<landmarks.length-1;i++){const a=toPx(landmarks[i]);const b=toPx(landmarks[i+1]);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}
+  const a0=toPx(landmarks[0]);const an=toPx(landmarks[landmarks.length-1]);ctx.moveTo(an.x,an.y);ctx.lineTo(a0.x,a0.y);ctx.stroke();
+  const important=[FACE.leftMouth,FACE.rightMouth,FACE.leftEyeOuter,FACE.rightEyeOuter,FACE.leftBrow,FACE.rightBrow];
+  for(const idx of important){if(landmarks[idx]){const p=toPx(landmarks[idx]);ctx.beginPath();ctx.arc(p.x,p.y,Math.max(2,Math.floor(h*0.008)),0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(p.x,p.y,Math.max(6,Math.floor(h*0.018)),0,Math.PI*2);ctx.strokeStyle='rgba(124,58,237,0.15)';ctx.stroke();}}
+  ctx.restore();
+  drawTextOverlay(note);
+}
+function drawTextOverlay(note=''){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  const padding=Math.max(10,Math.floor(h*0.02));
+  const fontSize=Math.max(16,Math.floor(h*0.04));
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  const dpr=window.devicePixelRatio||1;
+  ctx.scale(dpr,dpr);
+  const lines=[`Smiles detected: ${smileCount}`,`Eyebrow raises: ${browCount}`,`Head tilt angle (deg): ${lastTilt.toFixed(1)}`];
+  ctx.font=`600 ${fontSize}px sans-serif`;
+  ctx.textBaseline='top';
+  let maxW=0;for(const l of lines){maxW=Math.max(maxW,ctx.measureText(l).width);}
+  const boxW=maxW+padding*2;
+  const lineHeight=fontSize*1.05;
+  const boxH=lineHeight*lines.length+padding*1.3;
+  const boxX=12,boxY=12;
+  ctx.fillStyle='rgba(0,0,0,0.45)';
+  roundRect(ctx,boxX,boxY,boxW,boxH,10,true,false);
+  ctx.fillStyle='#e6eef8';
+  for(let i=0;i<lines.length;i++){ctx.fillText(lines[i],boxX+padding,boxY+padding/4+i*lineHeight);}
+  if(note){ctx.font=`${Math.max(12,Math.floor(fontSize*0.6))}px sans-serif`;ctx.fillStyle='rgba(255,255,255,0.75)';ctx.fillText(note,boxX+padding,boxY+padding/4+lines.length*lineHeight);}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.restore();
+}
+function roundRect(ctx,x,y,width,height,radius,fill,stroke){
+  if(typeof radius==='undefined')radius=5;
+  if(typeof radius==='number'){radius={tl:radius,tr:radius,br:radius,bl:radius};}
+  else{var defaultRadius={tl:0,tr:0,br:0,bl:0};for(var side in defaultRadius){radius[side]=radius[side]||defaultRadius[side];}}
+  ctx.beginPath();
+  ctx.moveTo(x+radius.tl,y);
+  ctx.lineTo(x+width-radius.tr,y);
+  ctx.quadraticCurveTo(x+width,y,x+width,y+radius.tr);
+  ctx.lineTo(x+width,y+height-radius.br);
+  ctx.quadraticCurveTo(x+width,y+height,x+width-radius.br,y+height);
+  ctx.lineTo(x+radius.bl,y+height);
+  ctx.quadraticCurveTo(x,y+height,x,y+height-radius.bl);
+  ctx.lineTo(x,y+radius.tl);
+  ctx.quadraticCurveTo(x,y,x+radius.tl,y);
+  ctx.closePath();
+  if(fill)ctx.fill();
+  if(stroke)ctx.stroke();
+}
+dprScale();
+})();
+</script>
+</body>
+</html>
