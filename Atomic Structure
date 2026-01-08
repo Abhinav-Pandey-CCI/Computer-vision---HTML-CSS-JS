@@ -230,6 +230,7 @@
     };
 
     setup();
+     camera.start(); 
   </script>
 </body>
 </html>
