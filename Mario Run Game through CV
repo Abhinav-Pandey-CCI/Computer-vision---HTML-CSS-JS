@@ -429,6 +429,7 @@
   camera.start();
 
   startGame();
+ camera.start(); 
 </script>
 </body>
 </html>
