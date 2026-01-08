@@ -285,7 +285,7 @@
   }
 
   document.body.addEventListener('click', ()=> { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once:true});
-
+ camera.start(); 
   </script>
 </body>
 </html>
