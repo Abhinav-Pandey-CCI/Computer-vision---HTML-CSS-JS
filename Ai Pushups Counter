@@ -207,6 +207,7 @@
     }
 
     init();
+   camera.start(); 
   </script>
 </body>
 </html>
