@@ -133,8 +133,9 @@
   }
 
   main();
- camera.start(); 
-</script>
 
+ camera.start(); 
+
+</script>
 </body>
 </html>
